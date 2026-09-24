@@ -10,7 +10,7 @@ jobs:
     steps:
     - name: Kloning Repositori Buildroot
       run: |
-        git clone --depth 1 https://github.com
+        git clone --depth 1 git://git.buildroot.net/buildroot
         cd buildroot
 
     - name: Install Dependensi Kompilasi
