@@ -1,18 +1,31 @@
-- name: Create Alpine RootFS EXT4 Image
+name: 2. Build Alpine RootFS EXT4
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/rootfs.yml'
+
+jobs:
+  build-rootfs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Create EXT4 RootFS
         run: |
           # 1. Unduh Alpine Minirootfs ARM32
           wget https://dl-cdn.alpinelinux.org/alpine/v3.20/releases/armhf/alpine-minirootfs-3.20.0-armhf.tar.gz
 
-          # 2. Buat file disk ext4 kosong berukuran 300MB
+          # 2. Buat file disk ext4 300MB
           dd if=/dev/zero of=alpine-rootfs.ext4 bs=1M count=300
           mkfs.ext4 alpine-rootfs.ext4
 
-          # 3. Mount disk dan ekstrak rootfs dengan akses sudo (bebas korupsi)
+          # 3. Mount disk & ekstrak rootfs
           mkdir -p mnt
           sudo mount alpine-rootfs.ext4 mnt
           sudo tar -xf alpine-minirootfs-3.20.0-armhf.tar.gz -C mnt
 
-          # 4. Suntikkan skrip /init otomatisasi jaringan + TUN/TAP
+          # 4. Inject skrip /init otomatisasi
           sudo bash -c 'cat << "EOF" > mnt/init
           #!/bin/sh
           mountpoint -q /proc || mount -t proc proc /proc
@@ -30,19 +43,17 @@
           udhcpc -i eth0 -b -s /usr/share/udhcpc/default.script >/dev/null 2>&1
 
           echo "=========================================="
-          echo " Alpine RootFS EXT4 Ready (No CPIO) "
+          echo " Alpine RootFS EXT4 Ready! "
           echo "=========================================="
 
-          exec setsid cttyhack /bin/sh
+          exec /bin/sh
           EOF'
 
           sudo chmod +x mnt/init
           sudo umount mnt
 
-      - name: Upload Kernel & RootFS Artifacts
+      - name: Upload RootFS Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: arm32-alpine-bundle
-          path: |
-            buildroot/output/images/zImage
-            alpine-rootfs.ext4
+          name: alpine-rootfs-ext4
+          path: alpine-rootfs.ext4
