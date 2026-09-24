@@ -64,6 +64,12 @@ jobs:
           CONFIG_IP_ADVANCED_ROUTER=y
           CONFIG_IP_MULTIPLE_TABLES=y
           CONFIG_VIRTIO_NET=y
+          CONFIG_NET_9P=y
+          CONFIG_NET_9P_VIRTIO=y
+          CONFIG_9P_FS=y
+          CONFIG_9P_FS_POSIX_ACL=y
+          CONFIG_9P_FS_SECURITY=y
+          CONFIG_VIRTIO_PCI=y
           EOF
 
       - name: Compile Kernel zImage
@@ -71,8 +77,10 @@ jobs:
           cd buildroot
           make linux -j$(nproc)
 
-      - name: Upload Kernel Artifact
+      - name: Upload Artifacts (zImage + DTB)
         uses: actions/upload-artifact@v4
         with:
-          name: arm32-virt-zImage
-          path: buildroot/output/images/zImage
+          name: arm32-vexpress-kernel
+          path: |
+            buildroot/output/images/zImage
+            buildroot/output/images/*.dtb
