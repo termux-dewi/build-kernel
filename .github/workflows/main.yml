@@ -1,0 +1,52 @@
+name: Build Linux Kernel zImage for QEMU ARM
+
+on:
+  workflow_dispatch: # Jalankan manual dari tab Actions
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Kloning Repositori Buildroot
+      run: |
+        git clone --depth 1 https://github.com
+        cd buildroot
+
+    - name: Install Dependensi Kompilasi
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y sed make binutils build-essential gcc g++ bash patch gzip bzip2 perl tar cpio unzip rsync file bc wget libncurses5-dev python3 git
+
+    - name: Konfigurasi Buildroot (Hanya Kernel)
+      run: |
+        cd buildroot
+        # Gunakan konfigurasi dasar QEMU ARM
+        make qemu_arm_versatile_defconfig
+        
+        # Matikan semua opsi pembuatan rootfs bawaan
+        sed -i 's/BR2_TARGET_ROOTFS_CPIO=y/# BR2_TARGET_ROOTFS_CPIO is not set/' .config
+        sed -i 's/BR2_TARGET_ROOTFS_TAR=y/# BR2_TARGET_ROOTFS_TAR is not set/' .config
+        
+        # Atur arsitektur spesifik Cortex-A7 (32-bit ARMv7)
+        sed -i 's/BR2_ARM_CPU_ARMV7A=y/# BR2_ARM_CPU_ARMV7A is not set/' .config
+        echo "BR2_cortex_a7=y" >> .config
+        
+        # Sinkronisasi ulang konfigurasi
+        make olddefconfig
+
+    - name: Kompilasi Kernel Mandiri (zImage)
+      run: |
+        cd buildroot
+        make linux
+
+    - name: Siapkan Dokumen Hasil
+      run: |
+        mkdir output_kernel
+        cp buildroot/output/images/zImage output_kernel/
+
+    - name: Unggah Kernel ke GitHub Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: qemu-arm-zImage
+        path: output_kernel/zImage
