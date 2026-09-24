@@ -24,10 +24,10 @@ jobs:
           curl -sL https://buildroot.org/downloads/buildroot-${BUILDROOT_VER}.tar.gz | tar -xz
           mv buildroot-${BUILDROOT_VER} buildroot
 
-      - name: Configure Kernel (qemu_arm_virt_defconfig)
+      - name: Configure Kernel (qemu_arm_vexpress_defconfig)
         run: |
           cd buildroot
-          make qemu_arm_virt_defconfig
+          make qemu_arm_vexpress_defconfig
           
           # Matikan pembuatan RootFS bawaan Buildroot
           sed -i 's/BR2_TARGET_ROOTFS_TAR=y/# BR2_TARGET_ROOTFS_TAR is not set/' .config
@@ -43,7 +43,7 @@ jobs:
           # CONFIG_USB is not set
           # CONFIG_WLAN is not set
 
-          # === FULL NETWORKING ===
+          # === FULL NETWORKING & VIRTIO ===
           CONFIG_NET=y
           CONFIG_INET=y
           CONFIG_IPV6=y
