@@ -48,6 +48,18 @@ jobs:
           # CONFIG_USB is not set
           # CONFIG_WLAN is not set
 
+          # Storage & Block Drivers (Penting untuk /dev/vda)
+          CONFIG_BLOCK=y
+          CONFIG_BLK_DEV=y
+          CONFIG_BLK_DEV_SD=y
+          CONFIG_VIRTIO=y
+          CONFIG_VIRTIO_RING=y
+          CONFIG_VIRTIO_MMIO=y
+          CONFIG_VIRTIO_BLK=y
+          CONFIG_EXT4_FS=y
+          CONFIG_EXT4_FS_POSIX_ACL=y
+          CONFIG_EXT4_FS_SECURITY=y
+          
           # === FULL NETWORKING & VIRTIO ===
           CONFIG_NET=y
           CONFIG_INET=y
