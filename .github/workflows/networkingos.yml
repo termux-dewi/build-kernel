@@ -30,7 +30,7 @@ jobs:
     - name: Configure Buildroot & Enable /dev/net/tun
       run: |
         cd buildroot
-        make qemu_arm_virt_defconfig
+        make qemu_arm_vexpress_defconfig
 
         # 1. Buat Kernel Fragment untuk mengaktifkan TUN/TAP Driver langsung di Kernel
         echo "CONFIG_TUN=y" > linux.fragment
