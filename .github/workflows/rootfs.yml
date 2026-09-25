@@ -21,7 +21,7 @@ jobs:
           mkdir -p rootfs
           sudo tar -xf void-rootfs.tar.xz -C rootfs
 
-          # 3. Hapus device node statis di /dev (agar aman diekstrak di Termux non-root)
+          # 3. Hapus device node statis di /dev
           sudo rm -rf rootfs/dev/*
 
           # 4. Injeksi DNS Resolv & Skrip /init
@@ -33,18 +33,22 @@ jobs:
           mountpoint -q /sys || mount -t sysfs sysfs /sys
           mountpoint -q /dev || mount -t devtmpfs devtmpfs /dev
 
-          # Auto-create TUN/TAP device node
+          # 1. Auto-mount /tmp dari SharedFS Termux
+          mkdir -p /tmp
+          mount -t 9p -o trans=virtio,version=9p2000.L tmp_tag /tmp 2>/dev/null
+
+          # 2. Auto-create TUN/TAP device node
           if [ ! -e /dev/net/tun ]; then
               mkdir -p /dev/net
               mknod /dev/net/tun c 10 200
               chmod 0666 /dev/net/tun
           fi
 
-          # Aktifkan Loopback & Ethernet
+          # 3. Aktifkan Loopback & Ethernet
           ip link set lo up
           ip link set eth0 up 2>/dev/null
 
-          # Otomatisasi DHCP
+          # 4. Otomatisasi DHCP
           if command -v dhcpcd >/dev/null 2>&1; then
               dhcpcd eth0 >/dev/null 2>&1 &
           elif command -v udhcpc >/dev/null 2>&1; then
@@ -53,9 +57,11 @@ jobs:
 
           echo "=========================================="
           echo " Void Linux ARMv7l (9pfs SharedFS) Ready! "
+          echo " Shared /tmp connected!                   "
           echo "=========================================="
 
-          exec setsid cttyhack /bin/sh 2>/dev/null || exec /bin/sh
+          # Buka shell langsung di ttyAMA0 (Perbaikan cttyhack)
+          exec /bin/sh </dev/ttyAMA0 >/dev/ttyAMA0 2>&1
           EOF'
 
           sudo chmod +x rootfs/init
