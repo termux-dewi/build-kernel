@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '.github/workflows/build-void-sharedfs.yml'
+      - '.github/workflows/rootfs.yml'
 
 jobs:
   build-void-sharedfs:
