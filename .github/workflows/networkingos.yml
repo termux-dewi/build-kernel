@@ -30,18 +30,17 @@ jobs:
     - name: Configure Buildroot & Enable /dev/net/tun
       run: |
         cd buildroot
-        # Gunakan defconfig resmi Buildroot untuk ARM 32-bit QEMU
         make qemu_arm_vexpress_defconfig
 
-        # 1. Inject Kernel Fragment untuk aktifkan /dev/net/tun
+        # 1. Kernel Fragment untuk aktifkan /dev/net/tun
         echo "CONFIG_TUN=y" > linux.fragment
 
-        # 2. Konfigurasi Tambahan
+        # 2. Konfigurasi bersih (tanpa opsi legacy)
         cat << 'EOF' >> .config
         BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="linux.fragment"
 
-        # Optimasi Booting & Init Ringan
-        BR2_OPTIMIZATION_3=y
+        # Optimasi Booting & Init
+        BR2_OPTIMIZE_3=y
         BR2_INIT_BUSYBOX=y
         BR2_TARGET_ROOTFS_CPIO=y
         BR2_TARGET_ROOTFS_CPIO_GZIP=y
@@ -56,7 +55,6 @@ jobs:
         BR2_PACKAGE_NANO=y
         BR2_PACKAGE_TREE=y
         BR2_PACKAGE_TMUX=y
-        BR2_PACKAGE_NEOFETCH=y
 
         # Networking Stack & VPN Tools
         BR2_PACKAGE_CA_CERTIFICATES=y
@@ -64,7 +62,6 @@ jobs:
         BR2_PACKAGE_CURL=y
         BR2_PACKAGE_WGET=y
         BR2_PACKAGE_DROPBEAR=y
-        BR2_PACKAGE_DROPBEAR_DISABLE_REVERSED_DNS=y
         BR2_PACKAGE_IPROUTE2=y
         BR2_PACKAGE_IPUTILS=y
         BR2_PACKAGE_IPTABLES=y
@@ -77,6 +74,7 @@ jobs:
         BR2_PACKAGE_ETHTOOL=y
         EOF
 
+        # Terapkan konfigurasi baru secara aman
         make olddefconfig
 
     - name: Compile Buildroot
