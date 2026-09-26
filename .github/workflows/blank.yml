@@ -1,91 +1,122 @@
-name: Buildroot Full Network TUN/TAP Fast Boot
+name: Build Alpine Virt Kernel (ARMv8L / ARMhf)
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "main" ]
-  workflow_dispatch:
 
 jobs:
-  build:
+  build-kernel:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Install Build Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          build-essential bc bison flex libncurses5-dev libssl-dev \
-          libglib2.0-dev ccache libelf-dev rsync cpio unzip wget git
+      - name: Install Toolchain & Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            gcc-arm-linux-gnueabihf \
+            g++-arm-linux-gnueabihf \
+            bison flex libncurses-dev libssl-dev libelf-dev bc cpio kmod \
+            git wget curl xz-utils lz4
 
-    - name: Download Buildroot LTS
-      run: |
-        BUILDROOT_VER="2024.02.8"
-        wget https://buildroot.org/downloads/buildroot-${BUILDROOT_VER}.tar.gz
-        tar -xzf buildroot-${BUILDROOT_VER}.tar.gz
-        mv buildroot-${BUILDROOT_VER} buildroot
+      - name: Fetch Linux Kernel LTS & Alpine Virt Config
+        run: |
+          KERNEL_VER="6.6.78"
+          
+          # Unduh Kernel Source LTS
+          wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${KERNEL_VER}.tar.xz
+          tar -xf linux-${KERNEL_VER}.tar.xz
+          mv linux-${KERNEL_VER} kernel-source
 
-    - name: Configure Buildroot Safely
-      run: |
-        cd buildroot
-        make qemu_arm_vexpress_defconfig
+          cd kernel-source
+          
+          # Unduh kernel config resmi Alpine Linux Virt (armhf)
+          wget -O .config https://git.alpinelinux.org/aports/plain/main/linux-virt/config-virt.armhf || make ARCH=arm defconfig
 
-        # 1. Kernel Fragment (PENTING: devtmpfs mount + /dev/net/tun)
-        cat << 'EOF' > linux.fragment
-        CONFIG_TUN=y
-        CONFIG_DEVTMPFS=y
-        CONFIG_DEVTMPFS_MOUNT=y
-        EOF
+      - name: Optimize for Fast Boot, Low RAM (1GB) & Buildroot Features
+        run: |
+          cd kernel-source
 
-        # 2. Injeksi Konfigurasi Buildroot
-        ./utils/config --set-str BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES "linux.fragment"
-        ./utils/config --enable BR2_ROOTFS_DEVICE_CREATION_DYNAMIC_DEVTMPFS
-        ./utils/config --enable BR2_INIT_BUSYBOX
-        ./utils/config --enable BR2_TARGET_ROOTFS_CPIO
-        ./utils/config --enable BR2_TARGET_ROOTFS_CPIO_GZIP
-        ./utils/config --set-str BR2_SYSTEM_DHCP "eth0"
-        ./utils/config --set-str BR2_TARGET_GENERIC_GETTY_PORT "ttyAMA0"
+          # 1. Optimasi Ukuran Kernel & Kecepatan Boot
+          ./scripts/config --enable CONFIG_CC_OPTIMIZE_FOR_SIZE
+          ./scripts/config --enable CONFIG_KERNEL_LZ4
+          ./scripts/config --disable CONFIG_DEBUG_KERNEL
+          ./scripts/config --disable CONFIG_SLUB_DEBUG
+          ./scripts/config --disable CONFIG_FTRACE
+          ./scripts/config --disable CONFIG_KALLSYMS_ALL
+          ./scripts/config --disable CONFIG_PROVE_LOCKING
+          ./scripts/config --disable CONFIG_DRM
+          ./scripts/config --disable CONFIG_SOUND
 
-        # Utilities
-        ./utils/config --enable BR2_PACKAGE_BUSYBOX_SHOW_OTHERS
-        ./utils/config --enable BR2_PACKAGE_BASH
-        ./utils/config --enable BR2_PACKAGE_HTOP
-        ./utils/config --enable BR2_PACKAGE_NANO
-        ./utils/config --enable BR2_PACKAGE_TREE
-        ./utils/config --enable BR2_PACKAGE_TMUX
+          # 2. Filesystem Built-in (Menghindari delay saat load initramfs)
+          ./scripts/config --enable CONFIG_DEVTMPFS
+          ./scripts/config --enable CONFIG_DEVTMPFS_MOUNT
+          ./scripts/config --enable CONFIG_EXT4_FS
+          ./scripts/config --enable CONFIG_SQUASHFS
+          ./scripts/config --enable CONFIG_SQUASHFS_LZ4
+          ./scripts/config --enable CONFIG_OVERLAY_FS
+          ./scripts/config --enable CONFIG_TMPFS
+          ./scripts/config --enable CONFIG_TMPFS_POSIX_ACL
 
-        # Networking & VPN Stack
-        ./utils/config --enable BR2_PACKAGE_CA_CERTIFICATES
-        ./utils/config --enable BR2_PACKAGE_LIBOPENSSL
-        ./utils/config --enable BR2_PACKAGE_CURL
-        ./utils/config --enable BR2_PACKAGE_WGET
-        ./utils/config --enable BR2_PACKAGE_DROPBEAR
-        ./utils/config --enable BR2_PACKAGE_IPROUTE2
-        ./utils/config --enable BR2_PACKAGE_IPUTILS
-        ./utils/config --enable BR2_PACKAGE_IPTABLES
-        ./utils/config --enable BR2_PACKAGE_NET_TOOLS
-        ./utils/config --enable BR2_PACKAGE_DNSMASQ
-        ./utils/config --enable BR2_PACKAGE_SOCAT
-        ./utils/config --enable BR2_PACKAGE_TCPDUMP
-        ./utils/config --enable BR2_PACKAGE_IPERF3
-        ./utils/config --enable BR2_PACKAGE_BRIDGE_UTILS
-        ./utils/config --enable BR2_PACKAGE_ETHTOOL
+          # 3. Fitur Lengkap untuk Buildroot / Container (CGroups & Namespaces)
+          ./scripts/config --enable CONFIG_NAMESPACES
+          ./scripts/config --enable CONFIG_UTS_NS
+          ./scripts/config --enable CONFIG_IPC_NS
+          ./scripts/config --enable CONFIG_USER_NS
+          ./scripts/config --enable CONFIG_PID_NS
+          ./scripts/config --enable CONFIG_NET_NS
+          ./scripts/config --enable CONFIG_CGROUPS
+          ./scripts/config --enable CONFIG_MEMCG
+          ./scripts/config --enable CONFIG_CGROUP_SCHED
+          ./scripts/config --enable CONFIG_CGROUP_FREEZER
+          ./scripts/config --enable CONFIG_CGROUP_DEVICE
+          ./scripts/config --enable CONFIG_CGROUP_CPUACCT
+          ./scripts/config --enable CONFIG_CGROUP_BPF
 
-        # 3. Regenerasi .config tanpa legacy
-        make olddefconfig
-        sed -i '/BR2_LEGACY/d' .config
+          # 4. Networking & Netfilter (Support IPTables/NFTables untuk Buildroot)
+          ./scripts/config --enable CONFIG_NETFILTER
+          ./scripts/config --enable CONFIG_IP_NF_IPTABLES
+          ./scripts/config --enable CONFIG_IP_NF_FILTER
+          ./scripts/config --enable CONFIG_IP_NF_NAT
+          ./scripts/config --enable CONFIG_NETFILTER_XT_MARK
 
-    - name: Compile Buildroot
-      run: |
-        cd buildroot
-        make -j$(nproc)
+          # 5. Drivers VirtIO & Virtualization
+          ./scripts/config --enable CONFIG_VIRTIO
+          ./scripts/config --enable CONFIG_VIRTIO_PCI
+          ./scripts/config --enable CONFIG_VIRTIO_BALLOON
+          ./scripts/config --enable CONFIG_VIRTIO_BLK
+          ./scripts/config --enable CONFIG_VIRTIO_NET
+          ./scripts/config --enable CONFIG_VIRTIO_MMIO
 
-    - name: Upload zImage & rootfs.cpio.gz
-      uses: actions/upload-artifact@v4
-      with:
-        name: buildroot-tun-arm32
-        path: |
-          buildroot/output/images/zImage
-          buildroot/output/images/rootfs.cpio.gz
+          # Terapkan konfig dan selesaikan dependensi otomatis
+          make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- olddefconfig
+
+      - name: Compile Kernel Image & Modules
+        run: |
+          cd kernel-source
+          make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- -j$(nproc) zImage modules dtbs
+
+      - name: Package Output Artifacts
+        run: |
+          mkdir -p output/modules
+          cd kernel-source
+          
+          # Salin zImage
+          cp arch/arm/boot/zImage ../output/
+          
+          # Install modules ke folder output
+          make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- INSTALL_MOD_PATH=../output/modules modules_install
+
+          # Arsipkan hasil build
+          cd ../output
+          tar -czvf alpine-virt-kernel-armv8l.tar.gz zImage modules/
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpine-virt-kernel-armv8l
+          path: output/alpine-virt-kernel-armv8l.tar.gz
