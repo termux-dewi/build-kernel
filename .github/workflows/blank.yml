@@ -36,18 +36,11 @@ jobs:
           # 1. Target QEMU ARM 32-bit dasar di Buildroot
           make qemu_arm_vexpress_defconfig
 
-          # 2. Folder penyimpanan Kernel Config (Gunakan Absolute Path)
+          # 2. Buat folder untuk Kconfig Fragment (Tanpa download external URL)
           KCONFIG_DIR="$(pwd)/../kernel_config"
           mkdir -p "$KCONFIG_DIR"
 
-          # 3. Unduh Config Alpine (curl -fL memunculkan error jika HTTP status non-200)
-          echo "[*] Downloading Alpine Virt Kernel Config..."
-          curl -fL -o "$KCONFIG_DIR/alpine_virt.config" \
-            https://gitlab.alpinelinux.org/alpine/aports/-/raw/3.19-stable/main/linux-virt/config-virt.armhf || \
-          curl -fL -o "$KCONFIG_DIR/alpine_virt.config" \
-            https://gitlab.alpinelinux.org/alpine/aports/-/raw/master/main/linux-virt/config-virt.armhf
-
-          # 4. Buat Kconfig Fragment Headless (Networking, Tunneling, Crypto, Docker, 9P, Strip GUI)
+          # 3. Buat Kconfig Fragment Headless Lengkap (Networking, Tunneling, Crypto, Docker, 9P, Strip GUI)
           cat << 'EOF' > "$KCONFIG_DIR/headless_fragment.config"
           # Fast Boot & LZ4
           CONFIG_KERNEL_LZ4=y
@@ -55,7 +48,7 @@ jobs:
           CONFIG_BOOT_PRINTK_DELAY=n
           CONFIG_QUIET_KERNEL=y
 
-          # Networking & Proxy
+          # Networking & Proxy (Full Advanced Features)
           CONFIG_NET=y
           CONFIG_INET=y
           CONFIG_IPV6=y
@@ -66,6 +59,7 @@ jobs:
           CONFIG_NET_SCHED=y
           CONFIG_NET_CLS_ACT=y
 
+          # Netfilter / IPTables / NFTables / TPROXY / IPSet
           CONFIG_NF_CONNTRACK=y
           CONFIG_NF_NAT=y
           CONFIG_NETFILTER_XT_TARGET_TPROXY=y
@@ -82,7 +76,7 @@ jobs:
           CONFIG_NFT_TPROXY=y
           CONFIG_NFT_COMPAT=y
 
-          # Tunneling & VPN
+          # Tunneling & VPN (WireGuard, GRE, VXLAN, TUN/TAP, SIT, IPIP)
           CONFIG_TUN=y
           CONFIG_TAP=y
           CONFIG_WIREGUARD=y
@@ -96,7 +90,7 @@ jobs:
           CONFIG_NET_IPIP=y
           CONFIG_NET_UDP_TUNNEL=y
 
-          # Routing & Congestion Control
+          # Routing & Congestion Control (BBR, Policy Routing, MPTCP)
           CONFIG_IP_ADVANCED_ROUTER=y
           CONFIG_IP_MULTIPLE_TABLES=y
           CONFIG_IP_ROUTE_MULTIPATH=y
@@ -116,7 +110,7 @@ jobs:
           CONFIG_CRYPTO_SHA256=y
           CONFIG_CRYPTO_SHA512=y
 
-          # Containers / Docker
+          # Containers / Docker / CGroups / Namespaces
           CONFIG_CGROUPS=y
           CONFIG_MEMCG=y
           CONFIG_BLK_CGROUP=y
@@ -134,7 +128,7 @@ jobs:
           CONFIG_SECCOMP=y
           CONFIG_OVERLAY_FS=y
 
-          # Storage & VirtIO (9P SharedFS)
+          # Storage & VirtIO (9P SharedFS untuk Termux Host)
           CONFIG_NET_9P=y
           CONFIG_NET_9P_VIRTIO=y
           CONFIG_9P_FS=y
@@ -152,7 +146,7 @@ jobs:
           CONFIG_VFAT_FS=y
           CONFIG_EXFAT_FS=y
 
-          # Strip GUI, Display & Audio
+          # Strip GUI, Display, Framebuffer, Sound & Media Total
           CONFIG_DRM=n
           CONFIG_FB=n
           CONFIG_FRAMEBUFFER_CONSOLE=n
@@ -163,10 +157,7 @@ jobs:
           CONFIG_LOGO=n
           EOF
 
-          # 5. Merge Config Alpine dengan Fragment Headless
-          ./support/kconfig/merge_config.sh -m -O "$KCONFIG_DIR" "$KCONFIG_DIR/alpine_virt.config" "$KCONFIG_DIR/headless_fragment.config"
-
-          # 6. Set Buildroot menggunakan Absolute Path untuk file .config
+          # 4. Hubungkan Defconfig ARMv7 standar + Fragment langsung ke Buildroot
           cat << EOF >> .config
           BR2_TARGET_ROOTFS_CPIO=y
           BR2_TARGET_ROOTFS_CPIO_GZIP=n
@@ -175,8 +166,9 @@ jobs:
 
           BR2_LINUX_KERNEL=y
           BR2_LINUX_KERNEL_LATEST_VERSION=y
-          BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
-          BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$KCONFIG_DIR/.config"
+          BR2_LINUX_KERNEL_USE_DEFCONFIG=y
+          BR2_LINUX_KERNEL_DEFCONFIG="multi_v7"
+          BR2_LINUX_KERNEL_CONFIG_FRAGMENTS="$KCONFIG_DIR/headless_fragment.config"
           BR2_TARGET_ROOTFS_CPIO_BUILTIN=y
           EOF
 
