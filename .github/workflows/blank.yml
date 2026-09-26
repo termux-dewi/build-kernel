@@ -22,53 +22,33 @@ jobs:
             git patch perl tar wget python3 lz4 liblz4-tool \
             gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
 
-      - name: Download & Extract Buildroot
+      - name: Download Buildroot
         run: |
           BUILDROOT_VER="2024.02.1"
           wget -q https://buildroot.org/downloads/buildroot-${BUILDROOT_VER}.tar.gz
           tar -xzf buildroot-${BUILDROOT_VER}.tar.gz
           mv buildroot-${BUILDROOT_VER} buildroot
 
-      - name: Setup Buildroot Base Config
-        run: |
-          cd buildroot
-          make qemu_arm_virt_defconfig
-          
-          # Konfigurasi CPIO Initramfs Terintegrasi + LZ4
-          cat << 'EOF' >> .config
-          BR2_TARGET_ROOTFS_CPIO=y
-          BR2_TARGET_ROOTFS_CPIO_GZIP=n
-          BR2_TARGET_ROOTFS_CPIO_LZ4=y
-          BR2_ROOTFS_OVERLAY="../board/custom/overlay"
-          
-          BR2_LINUX_KERNEL=y
-          BR2_LINUX_KERNEL_LATEST_VERSION=y
-          BR2_TARGET_ROOTFS_CPIO_BUILTIN=y
-          EOF
-
-          make olddefconfig
-
-      - name: Download Official Alpine Config & Inject Full Networking + Strip GUI
+      - name: Prepare Kernel Config & Buildroot Config
         run: |
           cd buildroot
           
-          # Unduh Kernel Config Resmi Alpine Linux (virt armhf)
-          mkdir -p linux
-          wget -q -O linux/alpine_virt.config https://gitlab.alpinelinux.org/alpine/aports/-/raw/master/main/linux-virt/config-virt.armhf || true
+          # 1. Gunakan target QEMU ARM 32-bit yang valid di Buildroot
+          make qemu_arm_vexpress_defconfig
 
-          # Injeksi Pengaturan Kernel Kustom
-          ./support/kconfig/merge_config.sh -m linux/.config linux/alpine_virt.config << 'EOF'
-          # ====================================================================
-          # 1. OPTIMASI FAST BOOT & COMPRESSION
-          # ====================================================================
+          # 2. Siapkan folder untuk gabungan Kernel Config
+          mkdir -p ../kernel_config
+          wget -q -O ../kernel_config/alpine_virt.config https://gitlab.alpinelinux.org/alpine/aports/-/raw/master/main/linux-virt/config-virt.armhf
+
+          # 3. Buat Kconfig Fragment (Full Network, Crypto, Container, VirtIO, SharedFS & Strip GUI)
+          cat << 'EOF' > ../kernel_config/headless_fragment.config
+          # Fast Boot & LZ4
           CONFIG_KERNEL_LZ4=y
           CONFIG_RD_LZ4=y
           CONFIG_BOOT_PRINTK_DELAY=n
           CONFIG_QUIET_KERNEL=y
 
-          # ====================================================================
-          # 2. FULL ADVANCED NETWORKING, ROUTING, FIREWALL & TUNNELING
-          # ====================================================================
+          # Networking & Proxy
           CONFIG_NET=y
           CONFIG_INET=y
           CONFIG_IPV6=y
@@ -79,7 +59,6 @@ jobs:
           CONFIG_NET_SCHED=y
           CONFIG_NET_CLS_ACT=y
 
-          # Netfilter / IPTables / NFTables / TPROXY / IPSet (Proxy & Redirection)
           CONFIG_NF_CONNTRACK=y
           CONFIG_NF_NAT=y
           CONFIG_NETFILTER_XT_TARGET_TPROXY=y
@@ -96,7 +75,7 @@ jobs:
           CONFIG_NFT_TPROXY=y
           CONFIG_NFT_COMPAT=y
 
-          # Tunneling & Virtual Interfaces (WireGuard, GRE, VXLAN, TUN/TAP, SIT, VTI)
+          # Tunneling & VPN
           CONFIG_TUN=y
           CONFIG_TAP=y
           CONFIG_WIREGUARD=y
@@ -110,7 +89,7 @@ jobs:
           CONFIG_NET_IPIP=y
           CONFIG_NET_UDP_TUNNEL=y
 
-          # Advanced Routing & Congestion Control (BBR, Policy Routing)
+          # Routing & Congestion
           CONFIG_IP_ADVANCED_ROUTER=y
           CONFIG_IP_MULTIPLE_TABLES=y
           CONFIG_IP_ROUTE_MULTIPATH=y
@@ -119,7 +98,7 @@ jobs:
           CONFIG_DEFAULT_BBR=y
           CONFIG_NET_MPTCP=y
 
-          # eBPF, Socket Filtering & Crypto Acceleration
+          # eBPF & Crypto
           CONFIG_BPF=y
           CONFIG_BPF_SYSCALL=y
           CONFIG_BPF_JIT=y
@@ -130,9 +109,7 @@ jobs:
           CONFIG_CRYPTO_SHA256=y
           CONFIG_CRYPTO_SHA512=y
 
-          # ====================================================================
-          # 3. FULL CONTAINER & VIRTUALIZATION SUPPORT (Docker/LXC/cgroups)
-          # ====================================================================
+          # Containers / Docker
           CONFIG_CGROUPS=y
           CONFIG_MEMCG=y
           CONFIG_BLK_CGROUP=y
@@ -150,9 +127,7 @@ jobs:
           CONFIG_SECCOMP=y
           CONFIG_OVERLAY_FS=y
 
-          # ====================================================================
-          # 4. STORAGE & VIRTIO DRIVERS (VirtFS / 9P SharedFS)
-          # ====================================================================
+          # Storage & VirtIO (9P SharedFS)
           CONFIG_NET_9P=y
           CONFIG_NET_9P_VIRTIO=y
           CONFIG_9P_FS=y
@@ -170,9 +145,7 @@ jobs:
           CONFIG_VFAT_FS=y
           CONFIG_EXFAT_FS=y
 
-          # ====================================================================
-          # 5. MATIKAN TOTAL SELURUH GRAFIS, SOUND, DISPLAY, DAN MEDIA (STRIPPED)
-          # ====================================================================
+          # Strip GUI, Display & Audio
           CONFIG_DRM=n
           CONFIG_FB=n
           CONFIG_FRAMEBUFFER_CONSOLE=n
@@ -180,21 +153,29 @@ jobs:
           CONFIG_SND=n
           CONFIG_MEDIA_SUPPORT=n
           CONFIG_MEDIA_CAMERA_SUPPORT=n
-          CONFIG_DRM_AMDGPU=n
-          CONFIG_DRM_NOUVEAU=n
-          CONFIG_DRM_I915=n
-          CONFIG_DRM_RADEON=n
-          CONFIG_AGP=n
-          CONFIG_VGA_CONSOLE=n
           CONFIG_LOGO=n
-          CONFIG_BACKLIGHT_CLASS_DEVICE=n
-          CONFIG_INPUT_JOYSTICK=n
-          CONFIG_INPUT_TOUCHSCREEN=n
           EOF
-          
-          make linux-rebuild
 
-      - name: Build Kernel Image
+          # 4. Merge Alpine Config + Fragment menjadi satu file .config kernel
+          ./support/kconfig/merge_config.sh -m -O ../kernel_config ../kernel_config/alpine_virt.config ../kernel_config/headless_fragment.config
+
+          # 5. Set Buildroot menggunakan Kernel Config custom ini & CPIO LZ4
+          cat << 'EOF' >> .config
+          BR2_TARGET_ROOTFS_CPIO=y
+          BR2_TARGET_ROOTFS_CPIO_GZIP=n
+          BR2_TARGET_ROOTFS_CPIO_LZ4=y
+          BR2_ROOTFS_OVERLAY="../board/custom/overlay"
+
+          BR2_LINUX_KERNEL=y
+          BR2_LINUX_KERNEL_LATEST_VERSION=y
+          BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
+          BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="../kernel_config/.config"
+          BR2_TARGET_ROOTFS_CPIO_BUILTIN=y
+          EOF
+
+          make olddefconfig
+
+      - name: Build Kernel & RootFS
         run: |
           cd buildroot
           make -j$(nproc)
