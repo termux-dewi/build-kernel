@@ -1,0 +1,47 @@
+#!/bin/sh
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+# 1. Mount Virtual Filesystems Utama (Terlengkap untuk Headless/Networking/Containers)
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts /dev/shm /run /sys/fs/cgroup
+mount -t devpts devpts /dev/pts -o mode=0620,ptmxmode=000
+mount -t tmpfs tmpfs /dev/shm
+mount -t tmpfs tmpfs /run
+
+# Mount CGroups V2 (Diperlukan untuk Docker / Podman / OpenRC)
+if [ -d /sys/fs/cgroup ]; then
+    mount -t cgroup2 cgroup2 /sys/fs/cgroup 2>/dev/null || true
+fi
+
+TARGET="/mnt/alpine"
+mkdir -p "$TARGET"
+
+echo "=========================================================="
+echo " Booting Headless Kernel (Full Network/Crypto/Containers) "
+echo "=========================================================="
+
+# 2. Mount RootFS Alpine via 9P SharedFS (Tag: alpine_root)
+mount -t 9p -o trans=virtio,version=9p2000.L,msize=262144,cache=mmap alpine_root "$TARGET" 2>/dev/null
+
+# Fallback ke Drive Block VirtIO jika 9P tidak dipasang
+if [ ! -x "$TARGET/sbin/init" ]; then
+    ROOT_DEV="/dev/vda"
+    [ -b "/dev/vda1" ] && ROOT_DEV="/dev/vda1"
+    mount -o rw "$ROOT_DEV" "$TARGET" 2>/dev/null
+fi
+
+# 3. Mount Bind & Direct Execution ke Alpine Linux
+if [ -x "$TARGET/sbin/init" ]; then
+    mount --bind /proc "$TARGET/proc"
+    mount --bind /sys "$TARGET/sys"
+    mount --bind /dev "$TARGET/dev"
+    mount --bind /dev/pts "$TARGET/dev/pts"
+    mount --bind /run "$TARGET/run"
+    
+    exec chroot "$TARGET" /sbin/init
+else
+    echo "[!] FATAL: Alpine RootFS tidak ditemukan!"
+    exec /bin/sh
+fi
