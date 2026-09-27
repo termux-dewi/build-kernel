@@ -48,7 +48,7 @@ jobs:
 
       - name: Prepare Kernel Config & Buildroot Config
         run: |
-          # 1. Pastikan file overlay executable dan berformat LF (Unix)
+          # 1. Paksa chmod +x dan format LF pada file overlay init
           if [ -f "../board/custom/overlay/init" ]; then
             chmod +x ../board/custom/overlay/init
             sed -i 's/\r$//' ../board/custom/overlay/init
@@ -60,9 +60,9 @@ jobs:
           KCONFIG_DIR="$(pwd)/../kernel_config"
           mkdir -p "$KCONFIG_DIR"
 
-          # 2. Fragment Config Kernel (Ditambahkan DEVTMPFS Auto-Mount)
+          # 2. Buat Fragment Config Kernel (Wajib DEVTMPFS)
           cat << 'EOF' > "$KCONFIG_DIR/headless_fragment.config"
-          # Devtmpfs Auto Mount (Memperbaiki /dev/null & /dev/ttyAMA0 missing)
+          # Devtmpfs Auto Mount (Fix /dev/null & /dev/ttyAMA0 missing)
           CONFIG_DEVTMPFS=y
           CONFIG_DEVTMPFS_MOUNT=y
 
@@ -72,7 +72,7 @@ jobs:
           CONFIG_BOOT_PRINTK_DELAY=n
           CONFIG_QUIET_KERNEL=y
 
-          # Networking & Netfilter
+          # Networking & Netfilter / Proxy / TPROXY / IPSet
           CONFIG_NET=y
           CONFIG_INET=y
           CONFIG_IPV6=y
