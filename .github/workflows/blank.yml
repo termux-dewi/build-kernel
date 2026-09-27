@@ -48,24 +48,31 @@ jobs:
 
       - name: Prepare Kernel Config & Buildroot Config
         run: |
+          # 1. Pastikan file overlay executable dan berformat LF (Unix)
+          if [ -f "../board/custom/overlay/init" ]; then
+            chmod +x ../board/custom/overlay/init
+            sed -i 's/\r$//' ../board/custom/overlay/init
+          fi
+
           cd buildroot
-          
-          # 1. Target QEMU ARM 32-bit dasar
           make qemu_arm_vexpress_defconfig
 
-          # 2. Folder penyimpanan Kconfig Fragment (Absolute Path)
           KCONFIG_DIR="$(pwd)/../kernel_config"
           mkdir -p "$KCONFIG_DIR"
 
-          # 3. Buat Kconfig Fragment Headless
+          # 2. Fragment Config Kernel (Ditambahkan DEVTMPFS Auto-Mount)
           cat << 'EOF' > "$KCONFIG_DIR/headless_fragment.config"
+          # Devtmpfs Auto Mount (Memperbaiki /dev/null & /dev/ttyAMA0 missing)
+          CONFIG_DEVTMPFS=y
+          CONFIG_DEVTMPFS_MOUNT=y
+
           # Fast Boot & LZ4
           CONFIG_KERNEL_LZ4=y
           CONFIG_RD_LZ4=y
           CONFIG_BOOT_PRINTK_DELAY=n
           CONFIG_QUIET_KERNEL=y
 
-          # Networking & Netfilter / Proxy / TPROXY / IPSet
+          # Networking & Netfilter
           CONFIG_NET=y
           CONFIG_INET=y
           CONFIG_IPV6=y
@@ -144,7 +151,7 @@ jobs:
           CONFIG_SECCOMP=y
           CONFIG_OVERLAY_FS=y
 
-          # Storage & VirtIO (9P SharedFS)
+          # Storage & VirtIO
           CONFIG_NET_9P=y
           CONFIG_NET_9P_VIRTIO=y
           CONFIG_9P_FS=y
@@ -173,7 +180,7 @@ jobs:
           CONFIG_LOGO=n
           EOF
 
-          # 4. Inject Konfigurasi ke .config Buildroot
+          # 3. Inject Konfigurasi ke .config Buildroot
           cat << EOF >> .config
           BR2_TARGET_ROOTFS_CPIO=y
           BR2_TARGET_ROOTFS_CPIO_GZIP=n
